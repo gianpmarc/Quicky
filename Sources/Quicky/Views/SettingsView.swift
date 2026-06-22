@@ -72,6 +72,20 @@ struct SettingsView: View {
                         Button("Open Settings") {
                             model.openScreenRecordingSettings()
                         }
+                        Button("Repair") {
+                            model.repairScreenRecordingPermission()
+                        }
+                        .disabled(model.screenPermissionGranted)
+                    }
+
+                    if let installationIssue = model.installationIssue {
+                        Label(installationIssue, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+
+                        Button("Reveal Quicky.app") {
+                            model.revealInstalledApp()
+                        }
                     }
 
                     LabeledContent("Bundle ID") {
@@ -86,7 +100,7 @@ struct SettingsView: View {
                             .textSelection(.enabled)
                     }
 
-                    Text("Screen Recording permission is tied by macOS to this exact installed app and its code signature. Use the bundled build script and a stable local signing identity to avoid repeated permission prompts during development.")
+                    Text("Screen Recording permission is tied by macOS to this exact installed app path and code signature. If the toggle is already enabled but Quicky still reports missing permission, use Repair, then enable Quicky again in System Settings.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -88,6 +88,10 @@ local signing identity named `Quicky Local Code Signing`. If that identity is no
 available, the build script falls back to ad-hoc signing and macOS may ask for
 permission again after rebuilds.
 
+Release DMGs should be built with a stable signing identity. Ad-hoc release
+DMGs are more likely to produce stale Screen Recording permission state after
+replacement or update.
+
 Permission behavior and local data handling are documented in
 [docs/SECURITY_AND_PERMISSIONS.md](docs/SECURITY_AND_PERMISSIONS.md).
 

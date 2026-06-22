@@ -11,16 +11,26 @@ struct StatusStrip: View {
                 if !model.screenPermissionGranted {
                     Image(systemName: "lock.shield")
                         .foregroundStyle(.orange)
-                    Text(model.screenPermissionNeedsRestartHint ? "Screen Recording changed. Restart Quicky if this stays visible." : "Screen Recording permission required")
+                    Text(statusMessage)
                         .foregroundStyle(.secondary)
                     Button("Allow") {
                         model.requestScreenRecordingPermission()
                     }
+                    .disabled(model.installationIssue != nil)
                     Button("Refresh") {
                         model.refreshPermissions(confirmWithRequest: true)
                     }
                     Button("Settings") {
                         model.openScreenRecordingSettings()
+                    }
+                    if model.installationIssue != nil {
+                        Button("Reveal App") {
+                            model.revealInstalledApp()
+                        }
+                    } else {
+                        Button("Repair") {
+                            model.repairScreenRecordingPermission()
+                        }
                     }
                 } else if recorder.isRecording {
                     Image(systemName: "record.circle.fill")
@@ -67,5 +77,17 @@ struct StatusStrip: View {
             .padding(.vertical, 8)
             .background(.bar)
         }
+    }
+
+    private var statusMessage: String {
+        if let installationIssue = model.installationIssue {
+            return installationIssue
+        }
+
+        if model.screenPermissionNeedsRestartHint {
+            return "Screen Recording changed. Restart Quicky if this stays visible."
+        }
+
+        return "Screen Recording permission required"
     }
 }

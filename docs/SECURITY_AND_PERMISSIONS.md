@@ -66,6 +66,15 @@ Preferred local signing identity: Quicky Local Code Signing
 For public non-notarized DMG builds, users may still need to approve both
 Gatekeeper first launch and Screen Recording permission.
 
+Quicky includes a Repair action for stale Screen Recording state. It runs:
+
+```sh
+tccutil reset ScreenCapture dev.quicky.Quicky
+```
+
+Then it reopens System Settings so the user can enable the currently installed
+copy of Quicky. This reset is scoped to Quicky's bundle ID.
+
 ## Trust Model
 
 The current public DMG is not notarized by Apple. Users should only install it
@@ -73,4 +82,3 @@ from the official project release page and may inspect or build the source code
 locally.
 
 Quicky should not ask users to disable Gatekeeper globally.
-

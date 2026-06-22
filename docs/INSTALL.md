@@ -45,6 +45,18 @@ Quicky needs Screen Recording permission to capture screenshots and videos.
 4. Restart Quicky if macOS asks you to.
 5. Click Refresh in Quicky if the banner is still visible.
 
+If the toggle is already enabled but Quicky still says Screen Recording is
+required:
+
+1. Make sure `Quicky.app` is in Applications and is not running from the DMG.
+2. Open Quicky Settings.
+3. In Permissions, click Repair.
+4. Enable Quicky again in System Settings.
+5. Quit and reopen Quicky if macOS asks you to.
+
+Repair resets only Quicky's Screen Recording entry. It does not disable
+Gatekeeper globally and does not change other apps' permissions.
+
 ## Updating Quicky
 
 1. Quit Quicky.
@@ -54,7 +66,9 @@ Quicky needs Screen Recording permission to capture screenshots and videos.
 5. Launch Quicky.
 
 macOS may ask for Screen Recording permission again if the app path, bundle ID,
-or code signature changes between releases.
+or code signature changes between releases. Official Quicky release DMGs are
+built with a stable self-signed Quicky signing identity to reduce this problem,
+but they are still not Apple Developer ID notarized.
 
 ## Troubleshooting
 
@@ -63,8 +77,9 @@ If Quicky still cannot open:
 - Make sure it is in `/Applications` or `~/Applications`.
 - Try Control-click > Open from Finder.
 - Check System Settings > Privacy & Security for an Open Anyway button.
+- Use Quicky Settings > Permissions > Repair if the Screen Recording toggle is
+  enabled but Quicky still reports it as missing.
 - Delete the damaged copy and install Quicky again from a fresh DMG.
 
 Do not disable Gatekeeper globally. Quicky should not require commands such as
 `sudo spctl --master-disable`.
-

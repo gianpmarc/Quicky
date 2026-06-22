@@ -16,6 +16,9 @@ That means:
   the Open Anyway control in Privacy & Security.
 - A local or self-signed code signing identity does not make the app an
   identified-developer app for other people.
+- Release builds should still use the same stable self-signed signing identity
+  every time. This does not bypass Gatekeeper, but it makes macOS Screen
+  Recording permission much less likely to get stuck or reset between builds.
 
 This is intentional for now to avoid requiring an Apple Developer Program
 membership.
@@ -56,17 +59,27 @@ The script:
 
 ## Local Signing Identity
 
-The scripts prefer a local signing identity named:
+The release scripts require a stable local signing identity named:
 
 ```text
 Quicky Local Code Signing
 ```
 
-This helps keep development builds stable on the maintainer machine, especially
-for Screen Recording permission.
+This helps keep both maintainer builds and public DMG builds stable for Screen
+Recording permission.
 
 For public users, this is not equivalent to Apple Developer ID. Users should
 still expect Gatekeeper warnings.
+
+Do not build public release DMGs with ad-hoc signing unless it is a temporary
+test artifact. If you intentionally need that, run:
+
+```sh
+QUICKY_ALLOW_ADHOC_RELEASE=1 QUICKY_CODESIGN_IDENTITY=- ./script/package_dmg.sh
+```
+
+Ad-hoc release artifacts are more likely to trigger stale Screen Recording
+permission state after replacement or update.
 
 ## Verification Checklist
 
@@ -85,6 +98,7 @@ mkdir -p /tmp/quicky-dmg-mount
 hdiutil attach dist/Quicky.dmg -readonly -nobrowse -mountpoint /tmp/quicky-dmg-mount
 ls -la /tmp/quicky-dmg-mount
 codesign --verify --deep --strict --verbose /tmp/quicky-dmg-mount/Quicky.app
+codesign -dv --verbose=2 /tmp/quicky-dmg-mount/Quicky.app 2>&1 | sed -n '1,12p'
 hdiutil detach /tmp/quicky-dmg-mount
 ```
 
@@ -116,6 +130,11 @@ Applications and choose Open. This creates a one-time Gatekeeper exception for
 that copy of the app.
 
 Quicky requires Screen Recording permission for screenshots and recordings.
+
+If Screen Recording is enabled but Quicky still reports missing permission, use
+Settings > Permissions > Repair in Quicky. This resets only Quicky's
+Screen Recording TCC entry, then reopens System Settings so the user can enable
+the current installed copy.
 ```
 
 ## Future Developer ID Path
@@ -128,4 +147,3 @@ If Quicky later adopts Developer ID distribution:
 4. Notarize the DMG with `xcrun notarytool`.
 5. Staple the notarization ticket.
 6. Verify the stapled artifact on a clean Mac.
-

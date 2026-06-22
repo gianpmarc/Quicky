@@ -31,6 +31,7 @@ final class AppModel: ObservableObject {
     @Published var isSelectingRecordingArea = false
     @Published private(set) var isScreenshotEditorActive = false
     @Published var playbackRequest: CapturePlaybackRequest?
+    @Published var installationIssue: String?
 
     private let hotKeyManager = HotKeyManager()
     private var permissionRequestAttempted = false
@@ -42,6 +43,7 @@ final class AppModel: ObservableObject {
 
     init() {
         self.screenPermissionGranted = PermissionsService.screenCaptureAllowed
+        self.installationIssue = PermissionsService.installationIssue
         recordingRegionOverlay.onCancel = { [weak self] in
             Task { @MainActor in
                 self?.cancelRecordingSetup()
@@ -74,6 +76,7 @@ final class AppModel: ObservableObject {
             .sink { [weak self] _ in
                 Task { @MainActor in
                     guard let self, !self.screenPermissionGranted else { return }
+                    self.installationIssue = PermissionsService.installationIssue
                     self.refreshPermissions()
                 }
             }
@@ -96,6 +99,7 @@ final class AppModel: ObservableObject {
             let isGranted = await PermissionsService.verifyScreenCaptureAccess(confirmWithRequest: confirmWithRequest)
             await MainActor.run {
                 guard let self else { return }
+                self.installationIssue = PermissionsService.installationIssue
                 self.applyScreenPermissionState(isGranted)
             }
         }
@@ -131,6 +135,23 @@ final class AppModel: ObservableObject {
     func openScreenRecordingSettings() {
         permissionRequestAttempted = true
         PermissionsService.openScreenRecordingSettings()
+    }
+
+    func repairScreenRecordingPermission() {
+        permissionRequestAttempted = true
+
+        do {
+            try PermissionsService.resetScreenCapturePermission()
+            applyScreenPermissionState(false)
+            showMessage("Permission reset. Enable Quicky again.")
+            PermissionsService.openScreenRecordingSettings()
+        } catch {
+            report(error)
+        }
+    }
+
+    func revealInstalledApp() {
+        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
     }
 
     func captureFullScreen() {
