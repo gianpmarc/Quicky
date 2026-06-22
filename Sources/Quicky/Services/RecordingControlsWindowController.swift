@@ -39,6 +39,7 @@ final class RecordingControlsWindowController {
                 .frame(width: size.width, height: size.height)
                 .environmentObject(model)
                 .environmentObject(model.recorder)
+                .environmentObject(model.settings)
         )
         panel.backgroundColor = .clear
         panel.isOpaque = false

@@ -5,6 +5,7 @@ MODE="${1:-run}"
 APP_NAME="Quicky"
 OLD_APP_NAME="QuickFrame"
 BUNDLE_ID="dev.quicky.Quicky"
+APP_VERSION="${QUICKY_APP_VERSION:-0.1.2}"
 MIN_SYSTEM_VERSION="13.0"
 SIGN_IDENTITY="${QUICKY_CODESIGN_IDENTITY:-Quicky Local Code Signing}"
 
@@ -63,9 +64,9 @@ cat >"$STAGE_INFO_PLIST" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleVersion</key>
-  <string>0.1.0</string>
+  <string>$APP_VERSION</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.1.0</string>
+  <string>$APP_VERSION</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.utilities</string>
   <key>LSMinimumSystemVersion</key>
