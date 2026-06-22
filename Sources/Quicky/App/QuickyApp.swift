@@ -25,17 +25,13 @@ struct QuickyApp: App {
                 model.captureAreaScreenshot()
             }
             Divider()
-            Button("Recording Controls") {
-                if model.recorder.isRecording {
-                    model.showRecordingControls()
-                } else {
-                    model.showRecordingControls()
-                }
+            Button("Start Recording") {
+                model.startRecordingCommand()
             }
-            Button("Pause Recording") {
-                model.pauseRecording()
+            Button(model.recorder.isPaused ? "Resume Recording" : "Pause Recording") {
+                model.toggleRecordingPause()
             }
-            .disabled(!model.recorder.isRecording || model.recorder.isPaused)
+            .disabled(!model.recorder.isRecording)
             Button("Stop Recording") {
                 model.stopRecordingCommand()
             }

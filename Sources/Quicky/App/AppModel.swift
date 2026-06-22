@@ -193,7 +193,7 @@ final class AppModel: ObservableObject {
     }
 
     func toggleAreaRecording() {
-        showRecordingControls()
+        startRecordingCommand()
     }
 
     func startRecordingCommand() {
@@ -226,6 +226,15 @@ final class AppModel: ObservableObject {
     func resumeRecording() {
         recorder.resume()
         showMessage("Recording resumed")
+    }
+
+    func toggleRecordingPause() {
+        guard recorder.isRecording else { return }
+        if recorder.isPaused {
+            resumeRecording()
+        } else {
+            pauseRecording()
+        }
     }
 
     func stopRecordingCommand() {
@@ -428,9 +437,9 @@ final class AppModel: ObservableObject {
         case .captureArea:
             captureAreaScreenshot()
         case .startRecording:
-            showRecordingControls()
+            startRecordingCommand()
         case .pauseRecording:
-            pauseRecording()
+            toggleRecordingPause()
         case .stopRecording:
             stopRecordingCommand()
         }

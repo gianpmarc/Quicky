@@ -65,8 +65,8 @@ private struct CaptureLauncherBar: View {
                 systemImage: "record.circle",
                 shortcut: settings.shortcut(for: .startRecording).displayString,
                 isProminent: recorder.isRecording,
-                help: "Open recording controls",
-                action: model.showRecordingControls
+                help: "Open or start recording",
+                action: model.startRecordingCommand
             )
         }
         .frame(maxWidth: 680)

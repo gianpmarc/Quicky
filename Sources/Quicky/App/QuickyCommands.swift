@@ -15,14 +15,14 @@ struct QuickyCommands: Commands {
 
             Divider()
 
-            Button("Recording Controls") {
-                model.showRecordingControls()
+            Button("Start Recording") {
+                model.startRecordingCommand()
             }
 
-            Button("Pause Recording") {
-                model.pauseRecording()
+            Button(model.recorder.isPaused ? "Resume Recording" : "Pause Recording") {
+                model.toggleRecordingPause()
             }
-            .disabled(!model.recorder.isRecording || model.recorder.isPaused)
+            .disabled(!model.recorder.isRecording)
 
             Button("Stop Recording") {
                 model.stopRecordingCommand()

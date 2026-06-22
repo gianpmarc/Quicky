@@ -16,9 +16,9 @@ enum ShortcutAction: String, CaseIterable, Codable, Identifiable, Hashable {
         case .captureArea:
             return "Area screenshot"
         case .startRecording:
-            return "Recording controls"
+            return "Start recording"
         case .pauseRecording:
-            return "Pause video"
+            return "Pause / resume video"
         case .stopRecording:
             return "Stop video"
         }
