@@ -55,13 +55,15 @@ macOS ties Screen Recording permission to the installed app path, bundle ID, and
 code signature. During development, changing any of these can make macOS ask for
 permission again.
 
-The stable development values are:
+The supported end-user install values are:
 
 ```text
-Path: ~/Applications/Quicky.app
+Path: /Applications/Quicky.app
 Bundle ID: dev.quicky.Quicky
-Preferred local signing identity: Quicky Local Code Signing
 ```
+
+Development builds may use `~/Applications/Quicky.app`, but do not keep that
+copy installed while testing the public DMG permission flow.
 
 For public non-notarized DMG builds, users may still need to approve both
 Gatekeeper first launch and Screen Recording permission.

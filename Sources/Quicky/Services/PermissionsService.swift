@@ -80,19 +80,19 @@ enum PermissionsService {
 
     static var installationIssue: String? {
         let bundleURL = Bundle.main.bundleURL.standardizedFileURL
-        let path = bundleURL.path
+        let path = bundleURL.resolvingSymlinksInPath().path
 
         if path.contains("/AppTranslocation/") {
             return "Quicky is running from a translocated path. Move Quicky.app to Applications, quit it, then open it from Applications before enabling Screen Recording."
         }
 
-        let allowedRoots = [
-            "/Applications/",
-            NSHomeDirectory() + "/Applications/"
-        ]
+        guard path.hasPrefix("/Applications/") else {
+            return "Move Quicky.app to Applications before enabling Screen Recording. macOS ties permission to the installed app path."
+        }
 
-        guard allowedRoots.contains(where: { path.hasPrefix($0) }) else {
-            return "Move Quicky.app to Applications before enabling Screen Recording. macOS ties the permission to the exact installed app."
+        let duplicatePath = NSHomeDirectory() + "/Applications/Quicky.app"
+        if FileManager.default.fileExists(atPath: duplicatePath) {
+            return "Remove the duplicate Quicky.app from your home Applications folder, then open the copy in /Applications."
         }
 
         return nil

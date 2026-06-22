@@ -1,5 +1,6 @@
 import Carbon
 import Foundation
+import os
 
 final class HotKeyManager {
     var onAction: ((ShortcutAction) -> Void)?
@@ -8,6 +9,7 @@ final class HotKeyManager {
     private var hotKeys: [UInt32: EventHotKeyRef] = [:]
     private var actionsByID: [UInt32: ShortcutAction] = [:]
     private let signature = fourCharacterCode("QCKY")
+    private let logger = Logger(subsystem: "dev.quicky.Quicky", category: "HotKeys")
 
     func register(shortcuts: [ShortcutAction: KeyShortcut]) {
         unregisterHotKeys()
@@ -79,6 +81,8 @@ final class HotKeyManager {
         if status == noErr, let hotKeyRef {
             hotKeys[id] = hotKeyRef
             actionsByID[id] = action
+        } else {
+            logger.error("Failed to register hotkey for \(action.rawValue, privacy: .public), status \(status)")
         }
     }
 }

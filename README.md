@@ -48,12 +48,11 @@ end-user install flow.
 ./script/build_and_run.sh
 ```
 
-The script builds the SwiftPM target, stages the app bundle, installs the
-runnable copy at `~/Applications/Quicky.app`, mirrors it to `dist/Quicky.app`,
-signs it, and launches the installed app. If a local code signing identity named
-`Quicky Local Code Signing` exists, the script uses it so macOS Screen Recording
-permission remains attached to the app across rebuilds; otherwise it falls back
-to ad-hoc signing.
+The script builds the SwiftPM target, stages the app bundle, installs a
+development copy at `~/Applications/Quicky.app`, mirrors it to `dist/Quicky.app`,
+signs it, and launches the installed app. This is for development only. For
+end-user installation and permission testing, use the DMG and install Quicky at
+`/Applications/Quicky.app`.
 
 Use this variant when you only want to verify that the process starts:
 
@@ -81,16 +80,17 @@ documented in [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
 
 ### Screen Recording Permission And Signing
 
-macOS ties Screen Recording permission to the exact app bundle and its code
-signature. During development, use the same installed path
-`~/Applications/Quicky.app`, the same bundle id `dev.quicky.Quicky`, and a stable
-local signing identity named `Quicky Local Code Signing`. If that identity is not
-available, the build script falls back to ad-hoc signing and macOS may ask for
-permission again after rebuilds.
+macOS ties Screen Recording permission to the exact app bundle path, bundle id,
+and code signature. For user-facing tests, keep one installed copy only:
+`/Applications/Quicky.app`. If the app is not Apple-notarized, approve first
+launch with Finder Control-click > Open or:
 
-Release DMGs should be built with a stable signing identity. Ad-hoc release
-DMGs are more likely to produce stale Screen Recording permission state after
-replacement or update.
+```sh
+xattr -dr com.apple.quarantine /Applications/Quicky.app && open /Applications/Quicky.app
+```
+
+That command only handles Gatekeeper quarantine. Screen Recording still needs to
+be enabled once in System Settings.
 
 Permission behavior and local data handling are documented in
 [docs/SECURITY_AND_PERMISSIONS.md](docs/SECURITY_AND_PERMISSIONS.md).

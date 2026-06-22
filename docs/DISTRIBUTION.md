@@ -13,12 +13,13 @@ That means:
 - macOS Gatekeeper will likely show an unidentified-developer warning on first
   launch.
 - Users must approve the app manually with Finder Control-click > Open, or with
-  the Open Anyway control in Privacy & Security.
+  the Open Anyway control in Privacy & Security. The DMG also includes a
+  `First Launch Quicky.command` helper that removes the quarantine attribute
+  from `/Applications/Quicky.app` and opens the app.
 - A local or self-signed code signing identity does not make the app an
   identified-developer app for other people.
-- Release builds should still use the same stable self-signed signing identity
-  every time. This does not bypass Gatekeeper, but it makes macOS Screen
-  Recording permission much less likely to get stuck or reset between builds.
+- Developer ID notarization is the only fully smooth first-launch path. Without
+  it, first-launch approval is expected.
 
 This is intentional for now to avoid requiring an Apple Developer Program
 membership.
@@ -35,6 +36,8 @@ The DMG contains:
 
 - `Quicky.app`
 - `Applications` symlink
+- `First Launch Quicky.command`
+- `README First Launch.txt`
 
 Users install Quicky by dragging `Quicky.app` to Applications.
 
@@ -50,36 +53,44 @@ The script:
 
 1. Builds Quicky with SwiftPM.
 2. Creates an app bundle at `dist/Quicky.app`.
-3. Copies the app into a temporary DMG root.
-4. Removes extended attributes from the app copy.
-5. Adds an `Applications` symlink.
-6. Creates `dist/Quicky.dmg`.
-7. Signs the DMG if the local signing identity is available.
-8. Verifies the DMG checksum.
+3. Stages the package in `/private/tmp` so it does not create a dev install in
+   `~/Applications`.
+4. Copies the app into a temporary DMG root.
+5. Removes extended attributes from the app copy.
+6. Adds an `Applications` symlink and first-launch helper.
+7. Creates `dist/Quicky.dmg`.
+8. Signs the DMG if the local signing identity is available.
+9. Verifies the DMG checksum.
 
-## Local Signing Identity
+## Signing Modes
 
-The release scripts require a stable local signing identity named:
+The release scripts use a local signing identity named this when available:
 
 ```text
 Quicky Local Code Signing
 ```
 
-This helps keep both maintainer builds and public DMG builds stable for Screen
-Recording permission.
+This can reduce permission churn on the maintainer machine, but it is not
+Developer ID and is not trusted as an identified developer by other Macs.
 
-For public users, this is not equivalent to Apple Developer ID. Users should
-still expect Gatekeeper warnings.
+If the identity is missing, the app bundle is signed ad-hoc and the DMG is left
+unsigned. This is acceptable for local non-notarized testing, but users should
+expect first-launch approval and may need to re-approve Screen Recording after
+updates.
 
-Do not build public release DMGs with ad-hoc signing unless it is a temporary
-test artifact. If you intentionally need that, run:
+For a smooth public release where users install, approve once, and keep that
+approval across updates, move to Apple Developer ID signing and notarization.
+
+## First Launch Approval
+
+After dragging Quicky to Applications, users can approve first launch with
+Finder Control-click > Open or with:
 
 ```sh
-QUICKY_ALLOW_ADHOC_RELEASE=1 QUICKY_CODESIGN_IDENTITY=- ./script/package_dmg.sh
+xattr -dr com.apple.quarantine /Applications/Quicky.app && open /Applications/Quicky.app
 ```
 
-Ad-hoc release artifacts are more likely to trigger stale Screen Recording
-permission state after replacement or update.
+This only removes Gatekeeper quarantine. It does not grant Screen Recording.
 
 ## Verification Checklist
 
@@ -135,6 +146,9 @@ If Screen Recording is enabled but Quicky still reports missing permission, use
 Settings > Permissions > Repair in Quicky. This resets only Quicky's
 Screen Recording TCC entry, then reopens System Settings so the user can enable
 the current installed copy.
+
+Terminal first-launch alternative after dragging Quicky to Applications:
+xattr -dr com.apple.quarantine /Applications/Quicky.app && open /Applications/Quicky.app
 ```
 
 ## Future Developer ID Path

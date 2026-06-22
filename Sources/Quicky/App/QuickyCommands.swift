@@ -18,15 +18,18 @@ struct QuickyCommands: Commands {
             Button("Start Recording") {
                 model.startRecordingCommand()
             }
+            .keyboardShortcut("r", modifiers: [.command, .option])
 
             Button(model.recorder.isPaused ? "Resume Recording" : "Pause Recording") {
                 model.toggleRecordingPause()
             }
+            .keyboardShortcut("p", modifiers: [.command, .option])
             .disabled(!model.recorder.isRecording)
 
             Button("Stop Recording") {
                 model.stopRecordingCommand()
             }
+            .keyboardShortcut("s", modifiers: [.command, .option])
             .disabled(!model.recorder.isRecording)
         }
 
