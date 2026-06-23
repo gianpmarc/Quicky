@@ -1,6 +1,5 @@
 import AppKit
 import CoreGraphics
-@preconcurrency import ScreenCaptureKit
 
 enum PermissionsService {
     enum PermissionRepairError: LocalizedError {
@@ -27,22 +26,17 @@ enum PermissionsService {
         if screenCaptureAllowed {
             return true
         }
-        if await screenCaptureKitProbeAllowed() {
-            return true
-        }
 
         guard confirmWithRequest else {
             return false
         }
+
         if CGRequestScreenCaptureAccess() {
             return true
         }
 
         try? await Task.sleep(nanoseconds: 450_000_000)
-        if screenCaptureAllowed {
-            return true
-        }
-        return await screenCaptureKitProbeAllowed()
+        return screenCaptureAllowed
     }
 
     @discardableResult
@@ -96,18 +90,6 @@ enum PermissionsService {
         }
 
         return nil
-    }
-
-    private static func screenCaptureKitProbeAllowed() async -> Bool {
-        do {
-            let content = try await SCShareableContent.excludingDesktopWindows(
-                false,
-                onScreenWindowsOnly: true
-            )
-            return !content.displays.isEmpty
-        } catch {
-            return false
-        }
     }
 
     private static var runningSystemSettingsApp: NSRunningApplication? {

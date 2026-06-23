@@ -67,7 +67,7 @@ struct SettingsView: View {
                         )
                         Spacer()
                         Button("Refresh") {
-                            model.refreshPermissions(confirmWithRequest: true)
+                            model.refreshPermissions()
                         }
                         Button("Open Settings") {
                             model.openScreenRecordingSettings()

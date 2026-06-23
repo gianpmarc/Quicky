@@ -93,10 +93,10 @@ final class AppModel: ObservableObject {
         hotKeyManager.register(shortcuts: settings.shortcuts)
     }
 
-    func refreshPermissions(confirmWithRequest: Bool = false) {
+    func refreshPermissions(confirmWithRequest _: Bool = false) {
         permissionRefreshTask?.cancel()
         permissionRefreshTask = Task { [weak self] in
-            let isGranted = await PermissionsService.verifyScreenCaptureAccess(confirmWithRequest: confirmWithRequest)
+            let isGranted = await PermissionsService.verifyScreenCaptureAccess(confirmWithRequest: false)
             await MainActor.run {
                 guard let self else { return }
                 self.installationIssue = PermissionsService.installationIssue
@@ -121,7 +121,14 @@ final class AppModel: ObservableObject {
         permissionRequestAttempted = true
 
         Task { [weak self] in
-            let isGranted = await PermissionsService.verifyScreenCaptureAccess(confirmWithRequest: true)
+            let isGranted: Bool
+            if PermissionsService.screenCaptureAllowed {
+                isGranted = true
+            } else {
+                _ = PermissionsService.requestScreenCaptureAccess()
+                try? await Task.sleep(nanoseconds: 450_000_000)
+                isGranted = await PermissionsService.verifyScreenCaptureAccess(confirmWithRequest: false)
+            }
             await MainActor.run {
                 guard let self else { return }
                 self.applyScreenPermissionState(isGranted)
@@ -448,9 +455,11 @@ final class AppModel: ObservableObject {
     private func ensurePermission() async throws {
         let isGranted = screenPermissionGranted
             ? true
-            : await PermissionsService.verifyScreenCaptureAccess(confirmWithRequest: true)
+            : await PermissionsService.verifyScreenCaptureAccess(confirmWithRequest: false)
         applyScreenPermissionState(isGranted)
         guard isGranted else {
+            permissionRequestAttempted = true
+            PermissionsService.openScreenRecordingSettings()
             throw CaptureError.screenCaptureDenied
         }
     }

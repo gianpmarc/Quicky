@@ -18,7 +18,7 @@ struct StatusStrip: View {
                     }
                     .disabled(model.installationIssue != nil)
                     Button("Refresh") {
-                        model.refreshPermissions(confirmWithRequest: true)
+                        model.refreshPermissions()
                     }
                     Button("Settings") {
                         model.openScreenRecordingSettings()
