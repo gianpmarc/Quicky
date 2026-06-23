@@ -68,6 +68,11 @@ copy installed while testing the public DMG permission flow.
 For public non-notarized DMG builds, users may still need to approve both
 Gatekeeper first launch and Screen Recording permission.
 
+Quicky checks this permission with `CGPreflightScreenCaptureAccess`. Background
+refreshes and the `Refresh` button are silent checks and must not call capture
+APIs that can trigger the macOS permission dialog. The only supported in-app
+action that can request the macOS prompt is `Allow`.
+
 Quicky includes a Repair action for stale Screen Recording state. It runs:
 
 ```sh

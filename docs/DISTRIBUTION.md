@@ -142,6 +142,11 @@ that copy of the app.
 
 Quicky requires Screen Recording permission for screenshots and recordings.
 
+Permission refreshes must remain silent. Do not use ScreenCaptureKit or other
+capture APIs as a permission probe, because macOS can show the Screen Recording
+dialog from those calls. Use `CGPreflightScreenCaptureAccess` for status checks
+and reserve `CGRequestScreenCaptureAccess` for the explicit `Allow` action.
+
 If Screen Recording is enabled but Quicky still reports missing permission, use
 Settings > Permissions > Repair in Quicky. This resets only Quicky's
 Screen Recording TCC entry, then reopens System Settings so the user can enable

@@ -63,6 +63,10 @@ Quicky needs Screen Recording permission to capture screenshots and videos.
 4. Quit and reopen Quicky if macOS asks you to.
 5. Click Refresh in Quicky if the banner is still visible.
 
+`Refresh` is a silent permission check. It must not show the macOS permission
+prompt. Only the `Allow` button is allowed to request Screen Recording access
+from macOS.
+
 If the toggle is already enabled but Quicky still says Screen Recording is
 required:
 

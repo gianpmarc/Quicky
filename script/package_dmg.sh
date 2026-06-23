@@ -60,6 +60,8 @@ Install:
 
 The First Launch helper only removes Apple's quarantine flag and opens Quicky.
 Screen Recording still has to be enabled by you in System Settings.
+After enabling the toggle, use Refresh in Quicky. Refresh is a silent check and
+should not show the macOS permission prompt again.
 README
 
 /usr/bin/hdiutil create \
