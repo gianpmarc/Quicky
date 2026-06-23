@@ -27,8 +27,7 @@ final class SelectionOverlayController: NSObject {
         }
 
         let overlayView = SelectionOverlayView(
-            frame: CGRect(origin: .zero, size: screen.frame.size),
-            snapRects: Self.windowSnapRects(on: screen)
+            frame: CGRect(origin: .zero, size: screen.frame.size)
         )
         overlayView.onComplete = { [weak self] rect in
             self?.finish(with: rect)
@@ -80,61 +79,6 @@ final class SelectionOverlayController: NSObject {
         continuation?.resume(returning: rect)
         continuation = nil
     }
-
-    private static func windowSnapRects(on screen: NSScreen) -> [CGRect] {
-        let currentPID = ProcessInfo.processInfo.processIdentifier
-        let desktopFrame = NSScreen.screens.map(\.frame).reduce(screen.frame) { partial, frame in
-            partial.union(frame)
-        }
-        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
-
-        guard let windowInfo = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
-            return []
-        }
-
-        return windowInfo.compactMap { info -> CGRect? in
-            guard let ownerNumber = info[kCGWindowOwnerPID as String] as? NSNumber,
-                  ownerNumber.int32Value != currentPID,
-                  let layerNumber = info[kCGWindowLayer as String] as? NSNumber,
-                  layerNumber.intValue == 0,
-                  let boundsDictionary = info[kCGWindowBounds as String] as? [String: Any],
-                  let cgBounds = CGRect(dictionaryRepresentation: boundsDictionary as CFDictionary),
-                  cgBounds.width >= 80,
-                  cgBounds.height >= 80 else {
-                return nil
-            }
-
-            if let alphaNumber = info[kCGWindowAlpha as String] as? NSNumber,
-               alphaNumber.doubleValue <= 0 {
-                return nil
-            }
-
-            let appKitRect = CGRect(
-                x: cgBounds.minX,
-                y: desktopFrame.maxY - cgBounds.maxY,
-                width: cgBounds.width,
-                height: cgBounds.height
-            )
-            let clippedRect = appKitRect.intersection(screen.frame)
-
-            guard !clippedRect.isNull,
-                  !clippedRect.isEmpty,
-                  clippedRect.width >= 80,
-                  clippedRect.height >= 80 else {
-                return nil
-            }
-
-            return CGRect(
-                x: clippedRect.minX - screen.frame.minX,
-                y: clippedRect.minY - screen.frame.minY,
-                width: clippedRect.width,
-                height: clippedRect.height
-            )
-        }
-        .sorted { lhs, rhs in
-            lhs.width * lhs.height < rhs.width * rhs.height
-        }
-    }
 }
 
 private final class SelectionOverlayWindow: NSWindow {
@@ -145,13 +89,10 @@ private final class SelectionOverlayWindow: NSWindow {
 private final class SelectionOverlayView: NSView {
     var onComplete: ((CGRect?) -> Void)?
 
-    private let snapRects: [CGRect]
     private var startPoint: CGPoint?
     private var currentPoint: CGPoint?
-    private var snapCandidateRect: CGRect?
 
-    init(frame frameRect: NSRect, snapRects: [CGRect]) {
-        self.snapRects = snapRects
+    override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
     }
 
@@ -176,14 +117,12 @@ private final class SelectionOverlayView: NSView {
         NSCursor.crosshair.set()
         startPoint = event.locationInWindow
         currentPoint = event.locationInWindow
-        snapCandidateRect = nil
         needsDisplay = true
     }
 
     override func mouseDragged(with event: NSEvent) {
         NSCursor.crosshair.set()
         currentPoint = event.locationInWindow
-        snapCandidateRect = rawSelectionRect.flatMap(snappedWindowRect)
         needsDisplay = true
     }
 
@@ -218,7 +157,7 @@ private final class SelectionOverlayView: NSView {
             context.fill(selectionRect)
             context.restoreGState()
 
-            let strokeColor = snapCandidateRect == nil ? NSColor.controlAccentColor : NSColor.systemGreen
+            let strokeColor = NSColor.controlAccentColor
             strokeColor.setStroke()
             let border = NSBezierPath(roundedRect: selectionRect, xRadius: 3, yRadius: 3)
             border.lineWidth = 2
@@ -226,80 +165,16 @@ private final class SelectionOverlayView: NSView {
 
             strokeColor.withAlphaComponent(0.12).setFill()
             border.fill()
-
-            if snapCandidateRect != nil {
-                drawSnapBadge(in: selectionRect)
-            }
         }
     }
 
-    private var rawSelectionRect: CGRect? {
+    private var selectionRect: CGRect? {
         guard let startPoint, let currentPoint else { return nil }
         return CGRect(
             x: min(startPoint.x, currentPoint.x),
             y: min(startPoint.y, currentPoint.y),
             width: abs(currentPoint.x - startPoint.x),
             height: abs(currentPoint.y - startPoint.y)
-        )
-    }
-
-    private var selectionRect: CGRect? {
-        snapCandidateRect ?? rawSelectionRect
-    }
-
-    private func snappedWindowRect(for rect: CGRect) -> CGRect? {
-        guard rect.width >= 24, rect.height >= 24 else { return nil }
-
-        let rawArea = max(1, rect.width * rect.height)
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let tolerance: CGFloat = 22
-
-        return snapRects.first { snapRect in
-            guard snapRect.insetBy(dx: -tolerance, dy: -tolerance).contains(center) else {
-                return false
-            }
-
-            let intersection = snapRect.intersection(rect)
-            guard !intersection.isNull, !intersection.isEmpty else { return false }
-
-            let intersectionArea = intersection.width * intersection.height
-            let snapArea = max(1, snapRect.width * snapRect.height)
-            let rawCoverage = intersectionArea / rawArea
-            let windowCoverage = intersectionArea / snapArea
-            if rawCoverage >= 0.82 && windowCoverage >= 0.48 {
-                return true
-            }
-
-            let edgeMatches = [
-                abs(rect.minX - snapRect.minX) <= tolerance,
-                abs(rect.maxX - snapRect.maxX) <= tolerance,
-                abs(rect.minY - snapRect.minY) <= tolerance,
-                abs(rect.maxY - snapRect.maxY) <= tolerance
-            ].filter { $0 }.count
-
-            return edgeMatches >= 3 && rawCoverage >= 0.70
-        }
-    }
-
-    private func drawSnapBadge(in selectionRect: CGRect) {
-        let label = "Window snap"
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
-            .foregroundColor: NSColor.white
-        ]
-        let labelSize = label.size(withAttributes: attributes)
-        let badgeRect = CGRect(
-            x: selectionRect.minX + 10,
-            y: selectionRect.maxY - labelSize.height - 16,
-            width: labelSize.width + 18,
-            height: labelSize.height + 8
-        )
-        let badgePath = NSBezierPath(roundedRect: badgeRect, xRadius: 8, yRadius: 8)
-        NSColor.systemGreen.withAlphaComponent(0.86).setFill()
-        badgePath.fill()
-        label.draw(
-            at: CGPoint(x: badgeRect.minX + 9, y: badgeRect.minY + 4),
-            withAttributes: attributes
         )
     }
 }
