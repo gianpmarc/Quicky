@@ -15,6 +15,7 @@ final class AppModel: ObservableObject {
     let settings = AppSettings()
     let captureService = CaptureService()
     let recorder = ScreenRecorder()
+    private let captureWindowVisibility = CaptureWindowVisibilityController()
     private let recordingRegionOverlay = RecordingRegionOverlayController()
     private let recordingTransparency = RecordingWindowTransparencyController()
     private lazy var recordingControlsWindow = RecordingControlsWindowController(model: self)
@@ -350,6 +351,9 @@ final class AppModel: ObservableObject {
         do {
             try await ensurePermission()
             await applyCaptureDelayIfNeeded()
+            let windowRestoration = captureWindowVisibility.hideApplicationForInstantCapture()
+            defer { windowRestoration.restore() }
+            await captureWindowVisibility.waitForWindowServerToSettle()
             let url = library.makeMediaURL(kind: .screenshot)
             let captured = try captureService.captureMainDisplay(to: url)
             markScreenCaptureWorking()
@@ -367,6 +371,9 @@ final class AppModel: ObservableObject {
     private func runCaptureAreaScreenshot() async {
         do {
             try await ensurePermission()
+            let windowRestoration = captureWindowVisibility.hideWindowsForInteractiveCapture()
+            defer { windowRestoration.restore() }
+            await captureWindowVisibility.waitForWindowServerToSettle()
             guard let rect = await captureService.selectRegion() else {
                 throw CaptureError.selectionCancelled
             }
