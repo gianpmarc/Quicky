@@ -1,5 +1,12 @@
 # Quicky
 
+[![GitHub stars](https://img.shields.io/github/stars/gianpmarc/Quicky?style=flat&logo=github)](https://github.com/gianpmarc/Quicky/stargazers)
+[![Latest release](https://img.shields.io/github/v/release/gianpmarc/Quicky?logo=apple)](https://github.com/gianpmarc/Quicky/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Website](https://img.shields.io/badge/website-gianpmarc.github.io%2FQuicky-f59e0b)](https://gianpmarc.github.io/Quicky/)
+
+**Website: [gianpmarc.github.io/Quicky](https://gianpmarc.github.io/Quicky/)**
+
 Quicky is an original open-source macOS capture utility for fast screenshots
 and short screen clips. It keeps capture, copy, rename, delete, and reveal
 actions close at hand so quick visual notes do not interrupt your flow.
@@ -34,7 +41,9 @@ reuse Screenpresso code, branding, assets, or reverse-engineered behavior.
 
 ## Install
 
-Download `Quicky.dmg`, open it, and drag `Quicky.app` to Applications.
+Download `Quicky.dmg` from the [latest release](https://github.com/gianpmarc/Quicky/releases/latest)
+(or from the [website](https://gianpmarc.github.io/Quicky/)), open it, and drag
+`Quicky.app` to Applications.
 
 Quicky is currently distributed without Apple Developer ID notarization. macOS
 may therefore show an unidentified-developer warning on first launch. If you
