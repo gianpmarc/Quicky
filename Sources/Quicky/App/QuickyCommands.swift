@@ -51,7 +51,6 @@ struct QuickyCommands: Commands {
             Button("Delete") {
                 model.deleteSelectedItem()
             }
-            .keyboardShortcut(.delete, modifiers: [])
             .disabled(model.library.selectedItem == nil || model.isScreenshotEditorActive)
         }
     }

@@ -2,7 +2,15 @@ import AppKit
 @preconcurrency import AVFoundation
 import CoreMedia
 import CoreVideo
+import os
 import ScreenCaptureKit
+
+enum RecordingPhase {
+    case idle
+    case starting
+    case recording
+    case stopping
+}
 
 struct RecordingResult {
     var url: URL
@@ -38,12 +46,33 @@ enum RecordingError: LocalizedError {
 }
 
 final class ScreenRecorder: NSObject, ObservableObject, @unchecked Sendable {
-    @Published private(set) var isRecording = false
+    @Published private(set) var phase: RecordingPhase = .idle
     @Published private(set) var isPaused = false
     @Published private(set) var elapsed: TimeInterval = 0
 
+    /// Called on the main actor when ScreenCaptureKit stops the stream on its own
+    /// (display disconnected, sleep, permission revoked). The file has already been
+    /// finalized with the frames captured so far, or discarded if there were none.
+    var onUnexpectedStop: ((Result<RecordingResult, Error>) -> Void)?
+
+    var isRecording: Bool {
+        phase == .recording || phase == .stopping
+    }
+
+    /// Pause bookkeeping shared between the main actor and `sampleQueue`.
+    /// `offset` is the total paused time, subtracted from every presentation
+    /// timestamp so the paused interval is cut from the file instead of being
+    /// rendered as a frozen frame.
+    private struct PauseState {
+        var isPaused = false
+        var pausedAt: CMTime?
+        var offset = CMTime.zero
+    }
+
     private let sampleQueue = DispatchQueue(label: "dev.quicky.recorder.samples")
+    private let pauseState = OSAllocatedUnfairLock(initialState: PauseState())
     private var stream: SCStream?
+    private var streamDelegate: ScreenRecorderStreamDelegate?
     private var streamOutput: ScreenRecorderOutput?
     private var assetWriter: AVAssetWriter?
     private var videoInput: AVAssetWriterInput?
@@ -61,7 +90,18 @@ final class ScreenRecorder: NSObject, ObservableObject, @unchecked Sendable {
 
     @MainActor
     func start(region appKitRect: CGRect, screen: NSScreen, outputURL: URL, showCursor: Bool) async throws {
-        guard !isRecording else { throw RecordingError.alreadyRecording }
+        guard phase == .idle else { throw RecordingError.alreadyRecording }
+        phase = .starting
+        do {
+            try await beginCapture(region: appKitRect, screen: screen, outputURL: outputURL, showCursor: showCursor)
+        } catch {
+            resetState()
+            throw error
+        }
+    }
+
+    @MainActor
+    private func beginCapture(region appKitRect: CGRect, screen: NSScreen, outputURL: URL, showCursor: Bool) async throws {
         guard let displayID = screen.displayID else { throw RecordingError.missingDisplay }
 
         let sourceRect = CaptureService.logicalSourceRect(forAppKitRect: appKitRect, on: screen)
@@ -91,7 +131,12 @@ final class ScreenRecorder: NSObject, ObservableObject, @unchecked Sendable {
         configuration.sourceRect = sourceRect
 
         let filter = SCContentFilter(display: display, excludingWindows: excludedWindows)
-        let stream = SCStream(filter: filter, configuration: configuration, delegate: nil)
+        let delegate = ScreenRecorderStreamDelegate { [weak self] error in
+            Task { @MainActor in
+                await self?.handleStreamStopped(with: error)
+            }
+        }
+        let stream = SCStream(filter: filter, configuration: configuration, delegate: delegate)
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
         let input = AVAssetWriterInput(
             mediaType: .video,
@@ -127,6 +172,7 @@ final class ScreenRecorder: NSObject, ObservableObject, @unchecked Sendable {
         try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: sampleQueue)
 
         self.stream = stream
+        self.streamDelegate = delegate
         self.streamOutput = output
         self.assetWriter = writer
         self.videoInput = input
@@ -140,72 +186,101 @@ final class ScreenRecorder: NSObject, ObservableObject, @unchecked Sendable {
         self.isPaused = false
         self.pausedAt = nil
         self.accumulatedPausedDuration = 0
+        pauseState.withLock { $0 = PauseState() }
 
         try await stream.startCapture()
         recordingStartedAt = Date()
-        isRecording = true
+        phase = .recording
         elapsed = 0
         startTimer()
     }
 
     @MainActor
     func stop() async throws -> RecordingResult {
-        guard isRecording else { throw RecordingError.notRecording }
+        guard phase == .recording else { throw RecordingError.notRecording }
+        phase = .stopping
+
+        defer {
+            resetState()
+        }
+
+        // A failing stopCapture (e.g. the stream already died) must not discard
+        // the frames written so far: finalize the file regardless.
+        try? await stream?.stopCapture()
+        return try await finalizeRecording().get()
+    }
+
+    @MainActor
+    func pause() {
+        guard phase == .recording, !isPaused else { return }
+        isPaused = true
+        pausedAt = Date()
+        pauseState.withLock { state in
+            state.isPaused = true
+            state.pausedAt = CMClockGetTime(CMClockGetHostTimeClock())
+        }
+    }
+
+    @MainActor
+    func resume() {
+        guard phase == .recording, isPaused else { return }
+        if let pausedAt {
+            accumulatedPausedDuration += Date().timeIntervalSince(pausedAt)
+        }
+        self.pausedAt = nil
+        isPaused = false
+        pauseState.withLock { state in
+            if let pausedAt = state.pausedAt {
+                state.offset = state.offset + (CMClockGetTime(CMClockGetHostTimeClock()) - pausedAt)
+            }
+            state.pausedAt = nil
+            state.isPaused = false
+        }
+    }
+
+    @MainActor
+    private func handleStreamStopped(with error: Error) async {
+        guard phase == .recording else { return }
+        phase = .stopping
+        let result = await finalizeRecording()
+        resetState()
+        onUnexpectedStop?(result)
+    }
+
+    /// Finishes the asset writer and validates the output file. On failure the
+    /// partial file is removed. Must be called while `phase == .stopping`.
+    @MainActor
+    private func finalizeRecording() async -> Result<RecordingResult, Error> {
         let finalURL = outputURL
         let duration = activeElapsedDuration()
         let width = videoWidth
         let height = videoHeight
         let writer = assetWriter
 
-        defer {
-            resetState()
-        }
-
         do {
-            try await stream?.stopCapture()
             try await finishWriting()
-        } catch RecordingError.noVideoFrames {
-            writer?.cancelWriting()
-            if let finalURL {
-                try? FileManager.default.removeItem(at: finalURL)
-            }
-            throw RecordingError.noVideoFrames
         } catch {
-            writer?.cancelWriting()
+            if writer?.status == .writing {
+                writer?.cancelWriting()
+            }
             if let finalURL {
                 try? FileManager.default.removeItem(at: finalURL)
             }
-            throw error
+            return .failure(error)
         }
 
-        guard let finalURL else { throw RecordingError.unableToCreateWriter }
+        guard let finalURL else { return .failure(RecordingError.unableToCreateWriter) }
         guard Self.fileSize(at: finalURL) > 0 else {
             try? FileManager.default.removeItem(at: finalURL)
-            throw RecordingError.noVideoFrames
+            return .failure(RecordingError.noVideoFrames)
         }
 
-        return RecordingResult(url: finalURL, width: width, height: height, duration: duration)
-    }
-
-    @MainActor
-    func pause() {
-        guard isRecording, !isPaused else { return }
-        isPaused = true
-        pausedAt = Date()
-    }
-
-    @MainActor
-    func resume() {
-        guard isRecording, isPaused else { return }
-        if let pausedAt {
-            accumulatedPausedDuration += Date().timeIntervalSince(pausedAt)
-        }
-        self.pausedAt = nil
-        isPaused = false
+        return .success(RecordingResult(url: finalURL, width: width, height: height, duration: duration))
     }
 
     private func append(_ sampleBuffer: CMSampleBuffer) {
-        guard !isPaused,
+        let pause = pauseState.withLock { $0 }
+        guard !pause.isPaused,
               Self.isCompleteFrame(sampleBuffer),
               CMSampleBufferDataIsReady(sampleBuffer),
               let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
@@ -215,7 +290,7 @@ final class ScreenRecorder: NSObject, ObservableObject, @unchecked Sendable {
             return
         }
 
-        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+        let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer) - pause.offset
         if !startedSession {
             guard writer.status == .unknown else { return }
             guard writer.startWriting() else { return }
@@ -223,7 +298,9 @@ final class ScreenRecorder: NSObject, ObservableObject, @unchecked Sendable {
             startedSession = true
         }
 
-        guard writer.status == .writing, input.isReadyForMoreMediaData else { return }
+        guard writer.status == .writing,
+              input.isReadyForMoreMediaData,
+              presentationTime > lastPresentationTime else { return }
         if adaptor.append(imageBuffer, withPresentationTime: presentationTime) {
             lastPresentationTime = presentationTime
             appendedFrameCount += 1
@@ -280,13 +357,15 @@ final class ScreenRecorder: NSObject, ObservableObject, @unchecked Sendable {
     @MainActor
     private func resetState() {
         stopTimer()
-        isRecording = false
+        phase = .idle
         isPaused = false
         elapsed = 0
         recordingStartedAt = nil
         pausedAt = nil
         accumulatedPausedDuration = 0
+        pauseState.withLock { $0 = PauseState() }
         stream = nil
+        streamDelegate = nil
         streamOutput = nil
         assetWriter = nil
         videoInput = nil
@@ -342,5 +421,17 @@ private final class ScreenRecorderOutput: NSObject, SCStreamOutput {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen else { return }
         onSampleBuffer(sampleBuffer)
+    }
+}
+
+private final class ScreenRecorderStreamDelegate: NSObject, SCStreamDelegate {
+    private let onStop: (Error) -> Void
+
+    init(onStop: @escaping (Error) -> Void) {
+        self.onStop = onStop
+    }
+
+    func stream(_ stream: SCStream, didStopWithError error: Error) {
+        onStop(error)
     }
 }

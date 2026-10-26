@@ -79,10 +79,11 @@ final class CaptureLibrary: ObservableObject {
         fileURL: URL,
         width: Int,
         height: Int,
-        duration: TimeInterval? = nil
+        duration: TimeInterval? = nil,
+        title: String? = nil
     ) -> CaptureItem {
         let createdAt = Date()
-        let title = "\(kind.displayName) \(DateFormatters.captureTitle.string(from: createdAt))"
+        let title = title ?? "\(kind.displayName) \(DateFormatters.captureTitle.string(from: createdAt))"
         let finalURL = consistentMediaURL(for: fileURL, title: title, kind: kind)
         let item = CaptureItem(
             kind: kind,
@@ -100,7 +101,13 @@ final class CaptureLibrary: ObservableObject {
     }
 
     func delete(_ item: CaptureItem) {
-        try? fileManager.removeItem(at: fileURL(for: item))
+        let url = fileURL(for: item)
+        do {
+            try fileManager.trashItem(at: url, resultingItemURL: nil)
+        } catch {
+            // Volumes without a Trash (network shares) fall back to a plain delete.
+            try? fileManager.removeItem(at: url)
+        }
         items.removeAll { $0.id == item.id }
         if selectedItemID == item.id {
             selectedItemID = items.first?.id
