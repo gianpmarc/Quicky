@@ -10,6 +10,11 @@ struct KeyShortcut: Codable, Equatable, Hashable {
         modifierDisplay + keyDisplay
     }
 
+    /// A global hotkey without ⌘, ⌃ or ⌥ would steal a plain key from every app.
+    var hasRequiredModifier: Bool {
+        modifiers & UInt32(cmdKey | controlKey | optionKey) != 0
+    }
+
     init(keyCode: UInt32, modifiers: UInt32) {
         self.keyCode = keyCode
         self.modifiers = modifiers

@@ -32,7 +32,7 @@ Library metadata is stored in:
 ~/Pictures/Quicky/Library.json
 ```
 
-Deleting a capture in Quicky removes its media file from the local vault.
+Deleting a capture in Quicky moves its media file to the Trash.
 
 ## Network
 

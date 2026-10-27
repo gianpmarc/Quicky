@@ -115,6 +115,9 @@ struct ScreenshotEditorView: View {
         .onReceive(NotificationCenter.default.publisher(for: .quickyScreenshotEditorCopyExitRequested)) { _ in
             copyAndExit()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .quickyScreenshotEditorCloseRequested)) { _ in
+            requestClose()
+        }
         .alert("Quicky", isPresented: $isCloseConfirmationPresented) {
             Button("Keep Editing", role: .cancel) { }
             Button("Exit Without Saving", role: .destructive) {

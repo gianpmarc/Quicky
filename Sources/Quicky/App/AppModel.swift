@@ -35,6 +35,7 @@ final class AppModel: ObservableObject {
     @Published var installationIssue: String?
 
     private let hotKeyManager = HotKeyManager()
+    private weak var mainWindow: NSWindow?
     private var permissionRequestAttempted = false
     private var permissionRefreshTask: Task<Void, Never>?
     private var keyboardMonitor: Any?
@@ -53,6 +54,9 @@ final class AppModel: ObservableObject {
 
         hotKeyManager.onAction = { [weak self] action in
             Task { @MainActor in self?.performShortcutAction(action) }
+        }
+        recorder.onUnexpectedStop = { [weak self] result in
+            self?.finishRecording(result, interrupted: true)
         }
         reloadHotKeys()
         installKeyboardMonitor()
@@ -92,6 +96,18 @@ final class AppModel: ObservableObject {
 
     func reloadHotKeys() {
         hotKeyManager.register(shortcuts: settings.shortcuts)
+    }
+
+    /// Temporarily releases the global hotkeys so a shortcut recorder can see
+    /// key combinations Quicky itself currently owns.
+    func suspendHotKeys() {
+        hotKeyManager.unregister()
+    }
+
+    /// The main library window; local keyboard handling for copy and delete
+    /// is limited to it so other windows keep their own key behaviour.
+    func registerMainWindow(_ window: NSWindow?) {
+        mainWindow = window
     }
 
     func refreshPermissions(confirmWithRequest _: Bool = false) {
@@ -184,7 +200,7 @@ final class AppModel: ObservableObject {
     }
 
     func dismissRecordingControls() {
-        guard !recorder.isRecording else { return }
+        guard recorder.phase == .idle else { return }
         recordingRegionOverlay.dismiss()
         isSelectingRecordingArea = false
         recordingControlsVisible = false
@@ -192,7 +208,7 @@ final class AppModel: ObservableObject {
     }
 
     func cancelRecordingSetup() {
-        guard !recorder.isRecording else { return }
+        guard recorder.phase == .idle else { return }
         recordingRegionOverlay.dismiss()
         isSelectingRecordingArea = false
         recordingControlsVisible = false
@@ -205,8 +221,10 @@ final class AppModel: ObservableObject {
     }
 
     func startRecordingCommand() {
-        guard !recorder.isRecording else {
-            showRecordingControls()
+        guard recorder.phase == .idle else {
+            if recorder.isRecording {
+                showRecordingControls()
+            }
             return
         }
         if !recordingRegionOverlay.isVisible {
@@ -246,7 +264,7 @@ final class AppModel: ObservableObject {
     }
 
     func stopRecordingCommand() {
-        guard recorder.isRecording else { return }
+        guard recorder.phase == .recording else { return }
         Task { @MainActor in
             await stopRecording()
         }
@@ -256,12 +274,12 @@ final class AppModel: ObservableObject {
         guard !isScreenshotEditorActive else { return }
         guard let item = library.selectedItem else { return }
         library.delete(item)
-        showMessage("Capture removed")
+        showMessage("Moved to Trash")
     }
 
     func delete(_ item: CaptureItem) {
         library.delete(item)
-        showMessage("Capture removed")
+        showMessage("Moved to Trash")
     }
 
     func rename(_ item: CaptureItem, to title: String) {
@@ -316,11 +334,27 @@ final class AppModel: ObservableObject {
             return
         }
 
-        screenshotEditorWindow.show(item: item, image: image)
+        // Editing an existing capture keeps the original and saves the result as a new snap.
+        screenshotEditorWindow.show(item: item, image: image, saveAsCopy: true)
     }
 
-    func finishScreenshotEditing(_ item: CaptureItem, image: CGImage) {
+    func finishScreenshotEditing(_ item: CaptureItem, image: CGImage, saveAsCopy: Bool) {
         do {
+            if saveAsCopy {
+                let url = library.makeMediaURL(kind: .screenshot)
+                try captureService.writeImage(image, to: url)
+                let editedItem = library.addItem(
+                    kind: .screenshot,
+                    fileURL: url,
+                    width: image.width,
+                    height: image.height,
+                    title: "\(item.title) (edited)"
+                )
+                captureService.copyImageToClipboard(image)
+                showCopiedFeedback(for: editedItem)
+                return
+            }
+
             let fileURL = library.fileURL(for: item)
             try captureService.writeImage(image, to: fileURL)
             captureService.copyImageToClipboard(image)
@@ -423,23 +457,29 @@ final class AppModel: ObservableObject {
     private func stopRecording() async {
         do {
             let result = try await recorder.stop()
+            finishRecording(.success(result), interrupted: false)
+        } catch {
+            finishRecording(.failure(error), interrupted: false)
+        }
+    }
+
+    private func finishRecording(_ result: Result<RecordingResult, Error>, interrupted: Bool) {
+        recordingTransparency.restore()
+        recordingRegionOverlay.dismiss()
+        recordingControlsWindow.dismiss()
+        recordingControlsVisible = false
+
+        switch result {
+        case .success(let recording):
             library.addItem(
                 kind: .recording,
-                fileURL: result.url,
-                width: result.width,
-                height: result.height,
-                duration: result.duration
+                fileURL: recording.url,
+                width: recording.width,
+                height: recording.height,
+                duration: recording.duration
             )
-            showMessage("Recording saved")
-            recordingTransparency.restore()
-            recordingRegionOverlay.dismiss()
-            recordingControlsWindow.dismiss()
-            recordingControlsVisible = false
-        } catch {
-            recordingTransparency.restore()
-            recordingRegionOverlay.dismiss()
-            recordingControlsWindow.dismiss()
-            recordingControlsVisible = false
+            showMessage(interrupted ? "Recording interrupted by macOS. Saved what was captured." : "Recording saved")
+        case .failure(let error):
             report(error)
         }
     }
@@ -476,7 +516,8 @@ final class AppModel: ObservableObject {
     }
 
     private func showScreenshotEditor(for item: CaptureItem, image: CGImage) {
-        screenshotEditorWindow.show(item: item, image: image)
+        // Right after a capture the raw snap is replaced by the annotated one.
+        screenshotEditorWindow.show(item: item, image: image, saveAsCopy: false)
     }
 
     private func installKeyboardMonitor() {
@@ -488,19 +529,7 @@ final class AppModel: ObservableObject {
     }
 
     private func handleKeyDown(_ event: NSEvent) -> NSEvent? {
-        if isScreenshotEditorActive,
-           event.keyCode == UInt16(kVK_ANSI_C),
-           event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command) {
-            NotificationCenter.default.post(name: .quickyScreenshotEditorCopyExitRequested, object: nil)
-            return nil
-        }
-
         guard !Self.isTextInputFocused else { return event }
-
-        if isScreenshotEditorActive,
-           event.keyCode == UInt16(kVK_Delete) || event.keyCode == UInt16(kVK_ForwardDelete) {
-            return event
-        }
 
         if event.keyCode == UInt16(kVK_Escape), recordingControlsVisible {
             if recorder.isRecording {
@@ -511,6 +540,10 @@ final class AppModel: ObservableObject {
             }
             return nil
         }
+
+        // Copy and delete shortcuts belong to the library window only. The
+        // screenshot editor and settings handle their own keys.
+        guard let mainWindow, event.window === mainWindow else { return event }
 
         if event.keyCode == UInt16(kVK_ANSI_C),
            event.modifierFlags.contains(.command) || event.modifierFlags.contains(.control),

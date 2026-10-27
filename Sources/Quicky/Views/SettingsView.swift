@@ -6,6 +6,7 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var settings: AppSettings
     @State private var recordingShortcutFor: ShortcutAction?
+    @State private var shortcutMessage: String?
     @State private var keyMonitor: Any?
 
     var body: some View {
@@ -45,7 +46,7 @@ struct SettingsView: View {
                         Label(action.title, systemImage: action.systemImage)
                         Spacer()
                         Button(shortcutTitle(for: action)) {
-                            recordingShortcutFor = action
+                            beginRecordingShortcut(for: action)
                         }
                         .buttonStyle(.bordered)
                     }
@@ -55,6 +56,12 @@ struct SettingsView: View {
                     Label("Press the new shortcut for \(recordingShortcutFor.title). Press Esc to cancel.", systemImage: "keyboard")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                if let shortcutMessage {
+                    Label(shortcutMessage, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
 
@@ -114,6 +121,7 @@ struct SettingsView: View {
         }
         .onDisappear {
             removeKeyMonitor()
+            endRecordingShortcut()
         }
     }
 
@@ -124,20 +132,42 @@ struct SettingsView: View {
         return settings.shortcut(for: action).displayString
     }
 
+    private func beginRecordingShortcut(for action: ShortcutAction) {
+        shortcutMessage = nil
+        recordingShortcutFor = action
+        // Otherwise pressing a combination Quicky already owns triggers that
+        // action instead of reaching this recorder.
+        model.suspendHotKeys()
+    }
+
+    private func endRecordingShortcut() {
+        guard recordingShortcutFor != nil else { return }
+        recordingShortcutFor = nil
+        model.reloadHotKeys()
+    }
+
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             guard let action = recordingShortcutFor else { return event }
 
             if event.keyCode == UInt16(kVK_Escape) {
-                recordingShortcutFor = nil
+                endRecordingShortcut()
                 return nil
             }
 
             let shortcut = KeyShortcut(event: event)
+            guard shortcut.hasRequiredModifier else {
+                shortcutMessage = "Use at least one of ⌘, ⌃ or ⌥."
+                return nil
+            }
+            if let other = ShortcutAction.allCases.first(where: { $0 != action && settings.shortcut(for: $0) == shortcut }) {
+                shortcutMessage = "\(shortcut.displayString) is already used by \(other.title)."
+                return nil
+            }
+
             settings.setShortcut(shortcut, for: action)
-            model.reloadHotKeys()
-            recordingShortcutFor = nil
+            endRecordingShortcut()
             return nil
         }
     }

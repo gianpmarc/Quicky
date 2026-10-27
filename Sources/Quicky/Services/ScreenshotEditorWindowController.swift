@@ -8,18 +8,19 @@ final class ScreenshotEditorWindowController: NSObject, NSWindowDelegate {
     private weak var model: AppModel?
     private var window: NSWindow?
     private var keyMonitor: Any?
+    private var isDismissing = false
 
     init(model: AppModel) {
         self.model = model
     }
 
-    func show(item: CaptureItem, image: CGImage) {
+    func show(item: CaptureItem, image: CGImage, saveAsCopy: Bool) {
         model?.setScreenshotEditorActive(true)
         let rootView = ScreenshotEditorView(
             itemTitle: item.title,
             baseImage: image,
             onCopyExit: { [weak self] editedImage in
-                self?.model?.finishScreenshotEditing(item, image: editedImage)
+                self?.model?.finishScreenshotEditing(item, image: editedImage, saveAsCopy: saveAsCopy)
                 self?.dismiss()
             },
             onClose: { [weak self] in
@@ -67,8 +68,22 @@ final class ScreenshotEditorWindowController: NSObject, NSWindowDelegate {
     func dismiss() {
         removeKeyMonitor()
         model?.setScreenshotEditorActive(false)
+        isDismissing = true
         window?.close()
+        isDismissing = false
         window = nil
+    }
+
+    /// The red close button goes through the editor's own close flow so unsaved
+    /// annotations get the same confirmation as the toolbar Close button.
+    nonisolated func windowShouldClose(_ sender: NSWindow) -> Bool {
+        MainActor.assumeIsolated {
+            if isDismissing {
+                return true
+            }
+            NotificationCenter.default.post(name: .quickyScreenshotEditorCloseRequested, object: sender)
+            return false
+        }
     }
 
     nonisolated func windowWillClose(_ notification: Notification) {
@@ -100,14 +115,14 @@ final class ScreenshotEditorWindowController: NSObject, NSWindowDelegate {
             return event
         }
 
+        guard !Self.isTextInputFocused(in: window) else {
+            return event
+        }
+
         if event.keyCode == UInt16(kVK_ANSI_C),
            event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command) {
             NotificationCenter.default.post(name: .quickyScreenshotEditorCopyExitRequested, object: window)
             return nil
-        }
-
-        guard !Self.isTextInputFocused(in: window) else {
-            return event
         }
 
         switch Int(event.keyCode) {

@@ -18,6 +18,9 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 980, minHeight: 620)
+        .background(WindowAccessor { window in
+            model.registerMainWindow(window)
+        })
         .onAppear {
             library.refreshFromDisk()
             model.refreshPermissions()

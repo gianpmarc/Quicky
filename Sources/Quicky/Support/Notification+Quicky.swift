@@ -5,4 +5,5 @@ extension Notification.Name {
     static let quickyScreenshotEditorDeleteRequested = Notification.Name("dev.quicky.screenshot-editor-delete-requested")
     static let quickyScreenshotEditorEscapeRequested = Notification.Name("dev.quicky.screenshot-editor-escape-requested")
     static let quickyScreenshotEditorCopyExitRequested = Notification.Name("dev.quicky.screenshot-editor-copy-exit-requested")
+    static let quickyScreenshotEditorCloseRequested = Notification.Name("dev.quicky.screenshot-editor-close-requested")
 }
